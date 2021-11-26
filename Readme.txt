@@ -34,11 +34,9 @@ HOW TO BUILD & RUN
 
 ALTERNATE SOLUTION FOR OTHER PLATFORMS
 
-AFAIK the object file format used on other platforms isn't as well-defined
-as on Windows, so I don't have a cross-platform version of this tool.
-
-However, if your platform comes with the GNU Binary Utilities, *and* if it
-includes objcopy, then you could do the following:
+This tool is Windows only, so it won't work on other platforms, like macOS
+or Linux. However, if your platform comes with the GNU Binary Utilities,
+*and* if it includes objcopy, then you could do the following:
 
 1. Create a C source file (my_data.c) that contains a single line:
 
@@ -65,9 +63,50 @@ includes objcopy, then you could do the following:
 
    g++ my_program.cpp my_data.o
 
-Note that Apple's Xcode apparently doesn't include objcopy, so for macOS I
-currently have no good solution (other than to convert your binary data to C
-source code).
+Note that Apple's Xcode apparently doesn't include objcopy, but there is yet
+another way:
+
+1. Create an assembly source file (my_data.s) that contains the following
+   lines:
+
+   .static_const
+   .align 4
+   .globl _MyArray
+   _MyArray: .incbin "my_data.bin"
+
+   Replace ".align 4" with the alignment that is appropriate for your data.
+   Note that this alignment is in 2^n bytes, so ".align 4" actually means
+   2^4 = 16 bytes.
+
+2. Assemble this assembly file to create an object file:
+
+   as -o my_data.o my_data.s
+
+3. Add this line to your own source code to declare the data as external:
+
+   extern "C" const unsigned char MyArray[1024*1024];
+
+   If you don't need to know the size at compile time, then you can also
+   omit the number of elements here.
+
+4. Link your own code against the object file:
+
+   g++ my_program.cpp my_data.o
+
+5. Create a symbol file (my_symbols.exp) containing the following line:
+
+   _MyArray
+
+   Note that this file can also hold multiple lines/symbols, in case you
+   have multiple binary files.
+
+6. Strip the symbols from your binary code:
+
+   strip -R my_symbols.exp -i a.out
+
+Note that you can also add the assembly file to your Xcode project, and then
+set Build Settings > Additional Strip Flags to "-R my_symbols.exp -i", so
+you can build using Xcode.
 
 LICENSE
 

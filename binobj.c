@@ -28,7 +28,7 @@ int main(const int argc, const char* const* argv)
 	}
 
 	const char* const name = argv[1];
-	const int align = atoi(argv[2]);
+	int align = atoi(argv[2]);
 	const char* const binFile = argv[3];
 	const char* const objFile = argv[4];
 
@@ -57,8 +57,8 @@ int main(const int argc, const char* const* argv)
 	imgFile.Machine = IMAGE_FILE_MACHINE_UNKNOWN;
 	imgFile.NumberOfSections = 1;
 	imgFile.TimeDateStamp = (DWORD)time(NULL);
-	imgFile.PointerToSymbolTable = sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_SECTION_HEADER) + binSize;
-	imgFile.NumberOfSymbols = 2;
+	imgFile.PointerToSymbolTable = sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_SECTION_HEADER);
+	imgFile.NumberOfSymbols = 3;
 
 	IMAGE_SECTION_HEADER imgSection;
 	memset(&imgSection, 0, sizeof(imgSection));
@@ -71,7 +71,7 @@ int main(const int argc, const char* const* argv)
 
 	switch (align)
 	{
-		default:
+		default: align = 1; // [[fallthrough]];
 		case 1: imgSection.Characteristics = IMAGE_SCN_ALIGN_1BYTES; break;
 		case 2: imgSection.Characteristics = IMAGE_SCN_ALIGN_2BYTES; break;
 		case 4: imgSection.Characteristics = IMAGE_SCN_ALIGN_4BYTES; break;
@@ -90,28 +90,47 @@ int main(const int argc, const char* const* argv)
 
 	imgSection.Characteristics |= IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
 
-	IMAGE_SYMBOL imgSymbol[2];
+	const DWORD padSize = ((binSize + align - 1) / align) * align - binSize;
+	imgSection.SizeOfRawData += padSize + sizeof(DWORD);
+	imgFile.PointerToSymbolTable += imgSection.SizeOfRawData;
+
+	IMAGE_SYMBOL imgSymbol[3];
 	memset(&imgSymbol, 0, sizeof(imgSymbol));
 
 	memcpy(imgSymbol[0].N.ShortName, rdata, IMAGE_SIZEOF_SHORT_NAME);
 	imgSymbol[0].SectionNumber = 1;
 	imgSymbol[0].StorageClass = IMAGE_SYM_CLASS_STATIC;
 
+	static const char* const suffix = "_size";
 	DWORD strTblSize = sizeof(DWORD);
-	size_t len = strlen(name);
+	size_t len[2], suffixLen = strlen(suffix);
 
-	if (len <= IMAGE_SIZEOF_SHORT_NAME)
+	len[0] = strlen(name);
+	len[1] = len[0] + suffixLen;
+
+	for (int i = 0; i < 2; ++i)
 	{
-		memcpy(imgSymbol[1].N.ShortName, name, len);
-	}
-	else
-	{
-		imgSymbol[1].N.Name.Long = strTblSize;
-		strTblSize += (DWORD)++len;
+		const int j = i + 1;
+
+		if (len[i] <= IMAGE_SIZEOF_SHORT_NAME)
+		{
+			memcpy(imgSymbol[j].N.ShortName, name, len[0]);
+		}
+		else
+		{
+			imgSymbol[j].N.Name.Long = strTblSize;
+			strTblSize += (DWORD)len[i] + 1;
+		}
+
+		imgSymbol[j].SectionNumber = 1;
+		imgSymbol[j].StorageClass = IMAGE_SYM_CLASS_EXTERNAL;
 	}
 
-	imgSymbol[1].SectionNumber = 1;
-	imgSymbol[1].StorageClass = IMAGE_SYM_CLASS_EXTERNAL;
+	if (len[1] <= IMAGE_SIZEOF_SHORT_NAME)
+	{
+		memcpy(imgSymbol[2].N.ShortName + len[0], suffix, suffixLen);
+	}
+	imgSymbol[2].Value = binSize + padSize;
 
 	unsigned char buf[4*1024];
 
@@ -132,11 +151,41 @@ int main(const int argc, const char* const* argv)
 		i -= n;
 	}
 
-	if (!(fwrite(&imgSymbol, sizeof(IMAGE_SYMBOL), 2, obj) == 2 &&
-	      fwrite(&strTblSize, sizeof(DWORD), 1, obj) == 1 && (strTblSize <= sizeof(DWORD) ||
-	      fwrite(name, 1, len, obj) == len)))
+	for (size_t i = padSize; i > 0;)
+	{
+		size_t n = sizeof(buf);
+		n = i < n ? i : n;
+
+		memset(buf, 0, n);
+		if (fwrite(buf, 1, n, obj) != n) goto writeErr;
+
+		i -= n;
+	}
+
+	if (!(fwrite(&binSize, sizeof(DWORD), 1, obj) == 1 &&
+	      fwrite(&imgSymbol, sizeof(IMAGE_SYMBOL), 3, obj) == 3 &&
+	      fwrite(&strTblSize, sizeof(DWORD), 1, obj) == 1))
 	{
 		goto writeErr;
+	}
+
+	if (strTblSize > sizeof(DWORD))
+	{
+		const size_t nameLen = len[0];
+		suffixLen++;
+
+		if (len[0]++ > IMAGE_SIZEOF_SHORT_NAME &&
+		    !(fwrite(name, 1, len[0], obj) == len[0]))
+		{
+			goto writeErr;
+		}
+
+		if (len[1]++ > IMAGE_SIZEOF_SHORT_NAME &&
+		    !(fwrite(name, 1, nameLen, obj) == nameLen &&
+		      fwrite(suffix, 1, suffixLen, obj) == suffixLen))
+		{
+			goto writeErr;
+		}
 	}
 
 	fclose(obj);

@@ -100,7 +100,7 @@ int main(const int argc, const char* const* argv)
 	DWORD strTblSize = sizeof(DWORD);
 	size_t len = strlen(name);
 
-	if (len <= 8)
+	if (len <= IMAGE_SIZEOF_SHORT_NAME)
 	{
 		memcpy(imgSymbol[1].N.ShortName, name, len);
 	}

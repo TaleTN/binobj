@@ -49,7 +49,7 @@ or Linux. However, if your platform comes with the GNU Binary Utilities,
 2. Compile this C file to create an object file containing zeros, and then
    use objcopy to replace the zeros with the actual binary data:
 
-    `gcc -fvisibility=hidden -c -o my_data.o my_data.c`
+    `gcc -fvisibility=hidden -c -o my_data.o my_data.c`  
     `objcopy --update-section .rodata=my_data.bin my_data.o`
 
 3. Add this line to your own source code to declare the data as external:
@@ -69,9 +69,9 @@ another way:
 1. Create an assembly source file (my_data.s) that contains the following
    lines:
 
-    `.static_const`
-    `.align 4`
-    `.globl _MyArray`
+    `.static_const`  
+    `.align 4`  
+    `.globl _MyArray`  
     `_MyArray: .incbin "my_data.bin"`
 
     Replace `.align 4` with the alignment that is appropriate for your data.
@@ -110,7 +110,7 @@ so you can build using Xcode.
 
 ## License
 
-Copyright &copy; 2021 Theo Niessink &lt;theo@taletn.com&gt;  
+Copyright &copy; 2021-2024 Theo Niessink &lt;theo@taletn.com&gt;  
 This work is free. You can redistribute it and/or modify it under the
 terms of the Do What The Fuck You Want To Public License, Version 2,
 as published by Sam Hocevar. See http://www.wtfpl.net/ for more details.
